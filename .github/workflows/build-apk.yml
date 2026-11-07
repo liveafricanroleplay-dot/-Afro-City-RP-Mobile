@@ -46,6 +46,33 @@ jobs:
           test -f Afro-City-RP-Mobile/gradlew
           test -f Afro-City-RP-Mobile/app/build.gradle
 
+      - name: Fix duplicate case-sensitive C++ headers
+        working-directory: Afro-City-RP-Mobile
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("app/src/main/cpp/AfroCityRP")
+          guards = {
+              "Common.h": "AFRO_CITYRP_COMMON_H",
+              "Entity.h": "AFRO_CITYRP_ENTITY_H",
+              "Actor.h": "AFRO_CITYRP_ACTOR_H",
+          }
+          for name, guard in guards.items():
+              for folder in ("Game", "game"):
+                  path = root / folder / name
+                  data = path.read_text(encoding="utf-8-sig")
+                  if f"#ifndef {guard}" in data:
+                      continue
+                  lines = data.splitlines()
+                  if lines and lines[0].strip() == "#pragma once":
+                      lines.insert(1, f"#ifndef {guard}")
+                      lines.insert(2, f"#define {guard}")
+                      data = "\n".join(lines) + f"\n#endif // {guard}\n"
+                  else:
+                      data = f"#ifndef {guard}\n#define {guard}\n" + data + f"\n#endif // {guard}\n"
+                  path.write_text(data, encoding="utf-8")
+          PY
+
       - name: Build debug APK
         working-directory: Afro-City-RP-Mobile
         run: |
