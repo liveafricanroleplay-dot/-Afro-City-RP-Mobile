@@ -51,26 +51,32 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           root = Path("app/src/main/cpp/AfroCityRP")
-          guards = {
-              "Common.h": "AFRO_CITYRP_COMMON_H",
-              "Entity.h": "AFRO_CITYRP_ENTITY_H",
-              "Actor.h": "AFRO_CITYRP_ACTOR_H",
-          }
-          for name, guard in guards.items():
-              for folder in ("Game", "game"):
-                  path = root / folder / name
+          upper = root / "Game"
+          lower = root / "game"
+
+          if not upper.is_dir() or not lower.is_dir():
+              raise SystemExit("Expected both Game and game source folders")
+
+          upper_headers = {p.name: p for p in upper.glob("*.h")}
+          lower_headers = {p.name: p for p in lower.glob("*.h")}
+          duplicates = sorted(set(upper_headers) & set(lower_headers))
+
+          for name in duplicates:
+              guard = "AFRO_CITYRP_SHARED_" + re.sub(r"[^A-Za-z0-9]", "_", name).upper()
+              for path in (upper_headers[name], lower_headers[name]):
                   data = path.read_text(encoding="utf-8-sig")
                   if f"#ifndef {guard}" in data:
                       continue
-                  lines = data.splitlines()
-                  if lines and lines[0].strip() == "#pragma once":
-                      lines.insert(1, f"#ifndef {guard}")
-                      lines.insert(2, f"#define {guard}")
-                      data = "\n".join(lines) + f"\n#endif // {guard}\n"
-                  else:
-                      data = f"#ifndef {guard}\n#define {guard}\n" + data + f"\n#endif // {guard}\n"
-                  path.write_text(data, encoding="utf-8")
+                  path.write_text(
+                      f"#ifndef {guard}\n#define {guard}\n" + data.rstrip() +
+                      f"\n#endif // {guard}\n",
+                      encoding="utf-8"
+                  )
+
+          print(f"Added shared include guards to {len(duplicates)} duplicate header pairs")
           PY
 
       - name: Build debug APK
