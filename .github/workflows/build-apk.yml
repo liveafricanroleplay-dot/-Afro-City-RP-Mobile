@@ -51,22 +51,22 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          from collections import defaultdict
           import re
 
           root = Path("app/src/main/cpp/AfroCityRP")
-          upper = root / "Game"
-          lower = root / "game"
+          groups = defaultdict(list)
+          for path in root.rglob("*.h"):
+              relative = path.relative_to(root).as_posix()
+              groups[relative.casefold()].append(path)
 
-          if not upper.is_dir() or not lower.is_dir():
-              raise SystemExit("Expected both Game and game source folders")
-
-          upper_headers = {p.name: p for p in upper.glob("*.h")}
-          lower_headers = {p.name: p for p in lower.glob("*.h")}
-          duplicates = sorted(set(upper_headers) & set(lower_headers))
-
-          for name in duplicates:
-              guard = "AFRO_CITYRP_SHARED_" + re.sub(r"[^A-Za-z0-9]", "_", name).upper()
-              for path in (upper_headers[name], lower_headers[name]):
+          fixed = 0
+          for key, paths in groups.items():
+              if len(paths) < 2:
+                  continue
+              token = re.sub(r"[^A-Za-z0-9]", "_", key).upper()
+              guard = "AFRO_CITYRP_CASE_SHARED_" + token
+              for path in paths:
                   data = path.read_text(encoding="utf-8-sig")
                   if f"#ifndef {guard}" in data:
                       continue
@@ -75,8 +75,9 @@ jobs:
                       f"\n#endif // {guard}\n",
                       encoding="utf-8"
                   )
+                  fixed += 1
 
-          print(f"Added shared include guards to {len(duplicates)} duplicate header pairs")
+          print(f"Added shared include guards to {fixed} headers across {sum(1 for v in groups.values() if len(v)>1)} case-colliding groups")
           PY
 
       - name: Build debug APK
